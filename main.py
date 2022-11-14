@@ -7,7 +7,7 @@ import numpy as np
 
 # Allow for some margin of error between when a clip is written to disk and when its
 # actual end-time is in real-time / game-time
-SLOP_TIME = 0.3
+SLOP_TIME = 1.1
 
 
 class ClipConcatter:
@@ -90,14 +90,13 @@ class ClipConcatter:
             f"Overlap starts near {overlap_start}: skipping inspection of "
             f"{num_frames_not_under_inspection} frames"
         )
-        # the start of inspection_clip begins somewhere near (but before) the first
-        # overlapping frame
-        inspection_clip = clip_a.subclip(num_frames_not_under_inspection / clip_a.fps)
 
         clip_b_frames = clip_b.iter_frames()
         clip_b_first_frame = next(clip_b_frames)
 
-        for inspection_frame_index, frame in enumerate(inspection_clip.iter_frames()):
+        for inspection_frame_index, frame in enumerate(clip_a.iter_frames()):
+            if inspection_frame_index <= num_frames_not_under_inspection:
+                continue
             if np.array_equal(frame, clip_b_first_frame, equal_nan=True):
                 print(
                     f"clip_a frame #{inspection_frame_index} is the same as first "
@@ -108,9 +107,7 @@ class ClipConcatter:
             print("Could not find a matching frame during inspection")
             return clip_a
 
-        first_overlapping_frame_index = (
-            inspection_frame_index + num_frames_not_under_inspection
-        )
+        first_overlapping_frame_index = inspection_frame_index
         print(f"{first_overlapping_frame_index=}")
 
         clip_a_stop_time = first_overlapping_frame_index / clip_a.fps
@@ -160,16 +157,32 @@ class ClipConcatter:
 
         final_clip.close()
 
+    def list_info(self):
+        for filename, clip in self.clips.items():
+            print(
+                f"----- Looking at {filename}; {clip.duration} seconds; "
+                f"{clip.fps} fps ------"
+            )
+
+        # cleanup
+        for _, clip in self.clips.items():
+            clip.close()
+
 
 def create(dir: str):
-    print("You can ignore the 'File Not Found' message")
     concatter = ClipConcatter(os.path.abspath(dir))
     concatter.create_concatenation()
 
     print(f"Trimmed a total of {concatter.time_saved} seconds!")
 
 
+def list_clips(dir: str):
+    concatter = ClipConcatter(os.path.abspath(dir))
+    concatter.list_info()
+
+
 if __name__ == "__main__":
+    print("You can ignore the 'File Not Found' message")
     from fire import Fire
 
-    Fire(create)
+    Fire({"create": create, "list": list_clips})
